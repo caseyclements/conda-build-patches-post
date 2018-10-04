@@ -1,6 +1,6 @@
-# Using patch files to modify source code to get conda packages to build for your target environment
+# Patching Source Code to Conda Build Recipes
 
-If you are a developer who relies upon conda, I hope to encourage you to begin building your own packages so that your projects can be used just like all of the other packages you rely upon. The success of Anaconda rests upon the ease to search for, install, and create environments for packages while automatically managing dependencies and versions. Recipes are Conda's way instructions to build a package, and they are typically very easy to create. 
+If you are a developer who relies upon conda, I hope to encourage you to begin building your own packages so that your projects can be used just like all of the other packages you rely upon. The success of Anaconda rests upon the ease to search for, install, and create environments for packages while automatically managing dependencies and versions. Conda Recipes are the blueprint to building packages. They contain all the dependency management information, and they are typically very easy to create. 
 
 [tip]: https://openclipart.org/image/24px/svg_to_png/194429/cartoon-eyes.png
 
@@ -15,16 +15,16 @@ Patches are particularly useful in the following scenarios.
 
 In what follows, we present a tutorial that we hope will help you with your case. Some knowledge of conda-build is assumed. For reference, the docs are [here](https://conda.io/docs/user-guide/tasks/build-packages/recipe.html)
 
-You will need conda, conda-build, and git. conda can be downloaded [here](https://conda.io/miniconda.html). Once conda is setup, `conda install conda-build git`. The instructions are written assuming a POSIX system. If you are using Windows, consider downloading Cygwin or MSYS2 to follow along.
+You will need conda, conda-build, and git. conda can be downloaded [here](https://conda.io/miniconda.html). Once conda is set up,  use it to install build and git. `conda install conda-build git`. The instructions that follow are written assuming a POSIX system. If you are using Windows, consider downloading Cygwin or MSYS2 to follow along.
 
 ### 1. Our starting point - a skeleton recipe
 
 We need a starting point for our recipe. There are three typical choices.
 * Manually create a [meta.yaml](https://conda.io/docs/user-guide/tasks/build-packages/define-metadata.html) from scratch or by copying an existing one.
-* Cloning an existing recipe from [conda-forge](https://github.com/conda-forge) 
+* Clone an existing recipe from [conda-forge](https://github.com/conda-forge) 
 * Use [conda-skeleton](https://conda.io/docs/user-guide/tutorials/build-pkgs-skeleton.html) to create a recipe from a PyPI package
 
-We've found a simple little package on PyPI to use for this tutorial, so it is natural that we use a skeleton for our starting point. Let's make a new directory to work within called 'patched',  build our skeleton recipe, and then rename it with mv. 
+We happened to stumble upon a small package in PyPI that required patching to create a recipe for. We don't know anything about the package internals, but we will use it here. As the package is on PyPI, we will use a skeleton for our starting point.  Let's make a new directory to work within called 'patched',  build our skeleton recipe, and then rename it with mv. 
 ```
 mkdir patched
 cd patched
@@ -34,7 +34,11 @@ mv rake recipe
 
 To track the changes we make to our recipe, let's initialize a git repository for it.
 ```
-git init recipe; cd recipe; git add .; git commit -m "Initial skeleton recipe"; cd ..
+git init recipe 
+cd recipe
+git add .
+git commit -m "Initial skeleton recipe"
+cd ..
 ```
 
 Finally, let's try to build our recipe.
@@ -49,7 +53,7 @@ The build log should throw an exception like the following.
 ```
 conda_build.exceptions.DependencyNeedsBuildingError: Unsatisfiable dependencies for platform osx-64: {"pbp.skels[version='>=0.2.4']", "pypirc[version='>=1.0.4']"}
 ```
-These two modules don't have conda packages. They are available on PyPI though, which one can confirm with `pip search pbp.skels`. In this circumstance, the solution is to remove the dependencies as explicit requirements and let setuptools do the work. The setup script becomes the following.
+![externally-managed][tip] These two modules don't have conda packages. They are available on PyPI though, which one can confirm with `pip search pbp.skels`. In this circumstance, the solution is to remove the dependencies as explicit requirements and let setuptools do the work. The setup script becomes the following.
 
 ```
 script: python setup.py install --single-version-externally-managed --record record.txt
@@ -87,15 +91,12 @@ This is an issue with the source, not the recipe. It is at this point that we be
 
 Once one begins playing with the source code, it is best to create a local git repo, and make frequent commits while experimenting with building the recipe. Most likely, you will end up making changes in both the source code and the recipe.
  
-![][tip] Use conda-render to see what the recipe's resolved url is. `conda render recipe`
+![render][tip] Use conda-render to see what the recipe's resolved url is. `conda render recipe`
 
-Download the source
+Download the source. Initialize a repo to track source changes.
 ```
 wget https://pypi.io/packages/source/r/rake/rake-1.0.tar.gz
 tar -xvf rake-1.0.tar.gz
-```
-Initialize a repo to track source changes
-```
 mkdir src
 git init src
 cp -R rake-1.0/\* src
@@ -114,7 +115,7 @@ Update recipe to point to local source. Make the following changes to meta.yaml
 +  #sha256: ea169d83e06cce58fa2257dd233ef36e16aa4ad40f29413f16c62ebc94a3e2d6
 +  path: ../src
 ```
-
+Commit your change.
 ```
 cd recipe
 git add meta.yaml
@@ -131,11 +132,11 @@ error: Namespace package problem: rake is a namespace package, but its __init__.
 (See the setuptools manual under "Namespace Packages" for details.)
 ```
 
-When one looks at the setuptools manual, one quickly find that rake is NOT a namespace package. The declaration in setup() was a mistake. From setup.py, remove the row declaring `namespace_packages=['rake'],` in `setup()` call.
+When one looks at the setuptools manual, one quickly finds that rake is NOT a namespace package. It's structure is straightfoward. The namespace declaration in setup() was just a mistake. From setup.py, remove the row declaring `namespace_packages=['rake'],` in `setup()` call.
 
 To confirm that this change fixes the build, run `conda build recipe --python=2.7`.
 
-_Why do we specifically specify python 2.7? Stay tuned_
+_Why do we specifically specify python 2.7? Stay tuned for the patch number two..._
 
 ### Create a patch
 
@@ -206,6 +207,10 @@ conda build recipe python=3.6
 file.write('Summary: %s\n' % self.get_description())
 TypeError: not all arguments converted during string formatting 
 ``` 
+
+
+(Currently working on this patch.)
+
 
 ![string issues][tip] When you see exceptions involving strings, it may be a Python 2to3 issue.
 
