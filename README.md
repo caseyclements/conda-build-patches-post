@@ -15,9 +15,9 @@ Patches are particularly useful in the following scenarios.
 
 In what follows, we present a tutorial that we hope will help you with your case. Some knowledge of conda-build is assumed. For reference, the docs are [here](https://conda.io/docs/user-guide/tasks/build-packages/recipe.html)
 
-You will need conda, conda-build, and git. conda can be downloaded [here](https://conda.io/miniconda.html). Once conda is setup, `conda install conda-build git`. 
+You will need conda, conda-build, and git. conda can be downloaded [here](https://conda.io/miniconda.html). Once conda is setup, `conda install conda-build git`. The instructions are written assuming a POSIX system. If you are using Windows, consider downloading Cygwin or MSYS2 to follow along.
 
-##### 1. Our starting point - a skeleton recipe
+### 1. Our starting point - a skeleton recipe
 
 We need a starting point for our recipe. There are three typical choices.
 * Manually create a [meta.yaml](https://conda.io/docs/user-guide/tasks/build-packages/define-metadata.html) from scratch or by copying an existing one.
@@ -43,7 +43,7 @@ Finally, let's try to build our recipe.
 conda build recipe
 ```
 
-##### 2. Update recipe to fix dependencies 
+### 2. Update recipe to fix dependencies 
 
 The build log should throw an exception like the following.
 ```
@@ -83,70 +83,130 @@ error: Namespace package problem: rake is a namespace package, but its __init__.
 ```
 This is an issue with the source, not the recipe. It is at this point that we begin patching.
 
-###### 3. Download source code. Create a new git repo.
+### 3. Download source code. Create a new git repo. Point recipe to it.
 
 Once one begins playing with the source code, it is best to create a local git repo, and make frequent commits while experimenting with building the recipe. Most likely, you will end up making changes in both the source code and the recipe.
  
 ![][tip] Use conda-render to see what the recipe's resolved url is. `conda render recipe`
 
-2. Download the source
+Download the source
 ```
 wget https://pypi.io/packages/source/r/rake/rake-1.0.tar.gz
 tar -xvf rake-1.0.tar.gz
 ```
-3. Initialize a repo to track source changes
+Initialize a repo to track source changes
 ```
 mkdir src
 git init src
-cp -R rake-1.0/* src
+cp -R rake-1.0/\* src
 cd src
 git add .
 git commit -m "Original source"
-```
-
-##### Update recipe to point to local source. Confirm that the same error is produced.
-
-
-
-##### Fix the namespace bug. Create patch
-
-  
-
-8. Change source, (optionally commit) build. repeat until successful.
-
-vi setup.py. Remove row declaring `namespace_packages=['rake'],` in `setup()` call
-
-
-9. Create a .patch file from git diff. Or git show. This has the additional benefit of containing a message at the top of the patch file, which is the commit message we used.
-
-```
-git add setup.py
-git commit -m "Remove incorrect namespace declaration in setup"
-git show HEAD
-git show HEAD > namespace.patch
 cd ..
-mv src/namespace.patch recipe
 ```
 
-10. Update meta.yaml to refer to the .patch file, reverting source to the original url.
+Update recipe to point to local source. Make the following changes to meta.yaml
+```
+ source:
+-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+-  sha256: ea169d83e06cce58fa2257dd233ef36e16aa4ad40f29413f16c62ebc94a3e2d6
++  #url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
++  #sha256: ea169d83e06cce58fa2257dd233ef36e16aa4ad40f29413f16c62ebc94a3e2d6
++  path: ../src
+```
 
+```
+cd recipe
+git add meta.yaml
+git commit -m "Update source to point to local path"
+cd ..
+```
+
+Confirm that the same exeption is thrown by `conda build recipe`.  
+
+### Fix the namespace bug.
+
+```
+error: Namespace package problem: rake is a namespace package, but its __init__.py does not call declare_namespace()! Please fix it.
+(See the setuptools manual under "Namespace Packages" for details.)
+```
+
+When one looks at the setuptools manual, one quickly find that rake is NOT a namespace package. The declaration in setup() was a mistake. From setup.py, remove the row declaring `namespace_packages=['rake'],` in `setup()` call.
+
+To confirm that this change fixes the build, run `conda build recipe --python=2.7`.
+
+_Why do we specifically specify python 2.7? Stay tuned_
+
+### Create a patch
+
+Having confirmed that our change to the source code has fixed the build, we commit the change, and then use git to produce a patch file.
+```
+cd src
+git add setup.py
+git commit -m "remove namespace declaration"
+git format-patch -1
+```
+
+This produces a file named '0001-remove-namespace-declaration.patch'. It shows the difference between the latest and the previous commit:
+```
+From c5e85f0861f1670c9f930641a2adfe75fa5c412e Mon Sep 17 00:00:00 2001
+From: Casey Clements <casey.clements@continuum.io>
+Date: Wed, 3 Oct 2018 23:39:37 -0400
+Subject: [PATCH] remove namespace declaration
+
+---
+ setup.py | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/setup.py b/setup.py
+index b846398..32656a8 100644
+--- a/setup.py
++++ b/setup.py
+@@ -15,7 +15,6 @@ setup(name= 'rake',
+     url="https://github.com/fishkao/rake",
+     packages = find_packages(),
+     package_data = {'':['*.*'],'rake':['*.*']},
+-    namespace_packages=['rake'],
+     long_description=open(README).read() + "\n\n",
+     description = ('Rapid Automatic Keywords Extraction', "Just a Practice"),
+     classifiers=[
+--
+```
+This file is then added to the recipe directory, and a reference to it added in the source:patches section of meta.yaml
+```
+mv src/0001-remove-namespace-declaration.patch recipe
+cd recipe
+vi meta.yaml
+```
+Change the source section to point back to the original url.
 ```
 source:
-  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: ea169d83e06cce58fa2257dd233ef36e16aa4ad40f29413f16c62ebc94a3e2d6
-  patches:
-    - namespace.patch
+   path: ../src
+   patches:
+     - 0001-remove-namespace-declaration.patch
+```
+```
+git add .
+git commit -m "Added namespace patch"
 ```
 
-11. Build again.
+Now you can build your successfully patched recipe! It no longer points to your local src repo!
 
+`conda build recipe --python=2.7`
+
+### A Second Patch - Python 3
+
+If it was not obvious before, our package will fail to build on Python 3. 
+
+```
+conda build recipe python=3.6
+```
+... produces the following error.
 ```
 file.write('Summary: %s\n' % self.get_description())
 TypeError: not all arguments converted during string formatting 
 ``` 
-===============
 
-Use Case #2
-- python 3
+![string issues][tip] When you see exceptions involving strings, it may be a Python 2to3 issue.
 
-
+Let's try to apply a second patch, to get out recipe to build for both Python 2.7 AND 3.6.
