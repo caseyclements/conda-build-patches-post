@@ -1,0 +1,6 @@
+[submodule "patched/recipe"]
+	path = patched/recipe
+	url = git@github.com:caseyclements/rake-recipe.git
+[submodule "patched/src"]
+	path = patched/src
+	url = git@github.com:caseyclements/rake-src.git
