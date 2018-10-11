@@ -128,7 +128,7 @@ cd ..
 
 Confirm that the same exception is thrown by `conda build recipe`.  
 
-### Fix the bug in the source.
+### 4. Fix the bug in the source.
 
 Recall that the exception that we had was a missing import.
 ```
@@ -157,7 +157,7 @@ index 482d915..46f4a41 100644
 +from . import trades
 ```
 
-### Create a patch
+### 5. Create a patch
 
 Having confirmed that our change to the source code has fixed the build, we commit the change, and then use git to produce a patch file.
 ```
